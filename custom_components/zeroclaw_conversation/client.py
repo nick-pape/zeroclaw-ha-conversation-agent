@@ -33,6 +33,10 @@ class ZeroClawAuthError(ZeroClawError):
     """The gateway rejected the bearer token."""
 
 
+class ZeroClawUnknownAgent(ZeroClawError):
+    """The gateway has no agent with that alias."""
+
+
 @dataclass
 class TurnEvent:
     """One event from a turn: ``kind`` is text, tool_call, tool_result or done."""
@@ -80,6 +84,9 @@ async def _open(
     except aiohttp.WSServerHandshakeError as err:
         if err.status in (401, 403):
             raise ZeroClawAuthError(f"gateway rejected the token (HTTP {err.status})") from err
+        if err.status == 400:
+            # Every /ws/chat session is bound to an agent; an unknown alias is a 400.
+            raise ZeroClawUnknownAgent(f"gateway refused the agent (HTTP {err.status})") from err
         raise ZeroClawError(f"gateway handshake failed (HTTP {err.status})") from err
 
 

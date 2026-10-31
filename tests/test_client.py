@@ -11,6 +11,7 @@ from aiohttp import web
 from zeroclaw_client import (
     ZeroClawAuthError,
     ZeroClawError,
+    ZeroClawUnknownAgent,
     chat_url,
     frame_message,
     probe,
@@ -28,6 +29,8 @@ def gateway(script):
     async def ws_chat(request: web.Request) -> web.StreamResponse:
         if request.headers.get("Authorization") != f"Bearer {TOKEN}":
             return web.Response(status=401)
+        if request.query.get("agent") == "nobody":
+            return web.Response(status=400)
         ws = web.WebSocketResponse(protocols=("zeroclaw.v1",))
         await ws.prepare(request)
         seen["query"] = dict(request.query)
@@ -132,6 +135,8 @@ async def test_probe_ok_and_bad_token(aiohttp_server):
         await probe(session, base_url=url, token=TOKEN, agent="assistant")
         with pytest.raises(ZeroClawAuthError):
             await probe(session, base_url=url, token="nope", agent="assistant")
+        with pytest.raises(ZeroClawUnknownAgent):
+            await probe(session, base_url=url, token=TOKEN, agent="nobody")
     assert [f["type"] for f in seen["frames"]] == ["connect"]
 
 

@@ -15,7 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .client import ZeroClawAuthError, ZeroClawError, probe
-from .const import CONF_AGENT, CONF_TOKEN, CONF_URL, DEFAULT_AGENT, DOMAIN
+from .const import CONF_AGENT, CONF_TOKEN, CONF_URL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,17 +30,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a ZeroClaw gateway entry."""
-    agent = next(
-        (s.data.get(CONF_AGENT, DEFAULT_AGENT) for s in entry.subentries.values()),
-        DEFAULT_AGENT,
-    )
+    agents = [s.data[CONF_AGENT] for s in entry.subentries.values() if s.data.get(CONF_AGENT)]
     try:
-        await probe(
-            async_get_clientsession(hass),
-            base_url=entry.data[CONF_URL],
-            token=entry.data[CONF_TOKEN],
-            agent=agent,
-        )
+        # Any agent will do: this checks the gateway and the token.
+        if agents:
+            await probe(
+                async_get_clientsession(hass),
+                base_url=entry.data[CONF_URL],
+                token=entry.data[CONF_TOKEN],
+                agent=agents[0],
+            )
     except ZeroClawAuthError as err:
         raise ConfigEntryAuthFailed(str(err)) from err
     except (ZeroClawError, aiohttp.ClientError, TimeoutError) as err:

@@ -51,16 +51,17 @@ own instructions decide what to do with that.
    or copy `custom_components/zeroclaw_conversation` into HA's `config/custom_components/`.
    Then restart HA.
 3. **Settings → Devices & services → Add integration → ZeroClaw Conversation**. Enter
-   the gateway URL (e.g. `wss://agents.example/ws/chat`) and the token.
-4. A conversation agent is created for the alias `default`. Reconfigure it to use
-   your agent's alias, or add more agents, from the integration's subentries.
+   the gateway URL (e.g. `wss://zeroclaw.example/ws/chat`), the token, the agent
+   alias (an `[agents.<alias>]` in ZeroClaw's config) and a display name.
+4. That creates the first conversation agent. Add more agents, or change one,
+   from the integration's subentries.
 5. **Settings → Voice assistants**: set the pipeline's conversation agent to it.
 
 ### Agent options
 
 | Option | Default | Meaning |
 |---|---|---|
-| ZeroClaw agent alias | `default` | `[agents.<alias>]` to talk to |
+| ZeroClaw agent alias | (required) | `[agents.<alias>]` to talk to |
 | Session | persistent | `persistent`: one session for every turn. `per_conversation`: `ha-<conversation_id>`, fresh after Assist's idle timeout |
 | Persistent session name | `ha-voice` | ZeroClaw session id in persistent mode |
 | Include location | on | Prefix the turn with the satellite's area |

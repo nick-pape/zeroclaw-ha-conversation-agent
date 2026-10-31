@@ -28,7 +28,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .client import ZeroClawAuthError, ZeroClawError, probe
+from .client import ZeroClawAuthError, ZeroClawError, ZeroClawUnknownAgent, probe
 from .const import (
     CONF_AGENT,
     CONF_INCLUDE_LOCATION,
@@ -36,7 +36,6 @@ from .const import (
     CONF_SESSION_NAME,
     CONF_TOKEN,
     CONF_URL,
-    DEFAULT_AGENT,
     DEFAULT_CONVERSATION_NAME,
     DEFAULT_CONVERSATION_OPTIONS,
     DEFAULT_SESSION_NAME,
@@ -55,6 +54,8 @@ async def _validate(hass, url: str, token: str, agent: str) -> dict[str, str]:
         await probe(async_get_clientsession(hass), base_url=url, token=token, agent=agent)
     except ZeroClawAuthError:
         return {"base": "invalid_auth"}
+    except ZeroClawUnknownAgent:
+        return {"base": "unknown_agent"}
     except (ZeroClawError, aiohttp.ClientError, TimeoutError):
         return {"base": "cannot_connect"}
     except Exception:
@@ -77,7 +78,8 @@ class ZeroClawConfigFlow(ConfigFlow, domain=DOMAIN):
             url = user_input[CONF_URL].rstrip("/")
             await self.async_set_unique_id(url)
             self._abort_if_unique_id_configured()
-            errors = await _validate(self.hass, url, user_input[CONF_TOKEN], DEFAULT_AGENT)
+            agent = user_input[CONF_AGENT].strip()
+            errors = await _validate(self.hass, url, user_input[CONF_TOKEN], agent)
             if not errors:
                 return self.async_create_entry(
                     title="ZeroClaw",
@@ -85,8 +87,8 @@ class ZeroClawConfigFlow(ConfigFlow, domain=DOMAIN):
                     subentries=[
                         {
                             "subentry_type": "conversation",
-                            "data": DEFAULT_CONVERSATION_OPTIONS,
-                            "title": DEFAULT_CONVERSATION_NAME,
+                            "data": {**DEFAULT_CONVERSATION_OPTIONS, CONF_AGENT: agent},
+                            "title": user_input.get(CONF_NAME) or agent,
                             "unique_id": None,
                         }
                     ],
@@ -102,6 +104,8 @@ class ZeroClawConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_TOKEN): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
                     ),
+                    vol.Required(CONF_AGENT): TextSelector(),
+                    vol.Optional(CONF_NAME, default=DEFAULT_CONVERSATION_NAME): TextSelector(),
                 }
             ),
             errors=errors or None,
@@ -120,9 +124,11 @@ class ZeroClawConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         entry = self._get_reauth_entry()
         if user_input is not None:
-            errors = await _validate(
-                self.hass, entry.data[CONF_URL], user_input[CONF_TOKEN], DEFAULT_AGENT
+            agent = next(
+                (s.data[CONF_AGENT] for s in entry.subentries.values() if s.data.get(CONF_AGENT)),
+                "",
             )
+            errors = await _validate(self.hass, entry.data[CONF_URL], user_input[CONF_TOKEN], agent)
             if not errors:
                 return self.async_update_reload_and_abort(
                     entry, data_updates={CONF_TOKEN: user_input[CONF_TOKEN]}
@@ -188,7 +194,7 @@ class ConversationSubentryFlowHandler(ConfigSubentryFlow):
         schema: dict[Any, Any] = {}
         if self._is_new:
             schema[vol.Required(CONF_NAME, default=DEFAULT_CONVERSATION_NAME)] = TextSelector()
-        schema[vol.Required(CONF_AGENT, default=DEFAULT_AGENT)] = TextSelector()
+        schema[vol.Required(CONF_AGENT)] = TextSelector()
         schema[vol.Required(CONF_SESSION_MODE, default=SESSION_PERSISTENT)] = SelectSelector(
             SelectSelectorConfig(
                 options=[

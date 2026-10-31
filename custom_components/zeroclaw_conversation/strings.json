@@ -3,10 +3,12 @@
     "step": {
       "user": {
         "title": "ZeroClaw gateway",
-        "description": "WebSocket URL of the ZeroClaw gateway's /ws/chat endpoint and a paired bearer token.",
+        "description": "WebSocket URL of the ZeroClaw gateway's /ws/chat endpoint, a paired bearer token, and the first agent to add.",
         "data": {
           "url": "Gateway URL",
-          "token": "Paired token"
+          "token": "Paired token",
+          "agent": "ZeroClaw agent alias",
+          "name": "Conversation agent name"
         }
       },
       "reauth_confirm": {
@@ -18,8 +20,9 @@
       }
     },
     "error": {
-      "cannot_connect": "Could not reach the gateway, or it does not know that agent.",
+      "cannot_connect": "Could not reach the gateway.",
       "invalid_auth": "The gateway rejected the token.",
+      "unknown_agent": "The gateway has no agent with that alias.",
       "unknown": "Unexpected error."
     },
     "abort": {
