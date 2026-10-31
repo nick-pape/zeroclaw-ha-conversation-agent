@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ZeroClaw gateway",
+        "description": "WebSocket URL of the ZeroClaw gateway's /ws/chat endpoint and a paired bearer token.",
+        "data": {
+          "url": "Gateway URL",
+          "token": "Paired token"
+        }
+      },
+      "reauth_confirm": {
+        "title": "New ZeroClaw token",
+        "description": "The gateway rejected the stored token.",
+        "data": {
+          "token": "Paired token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the gateway, or it does not know that agent.",
+      "invalid_auth": "The gateway rejected the token.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This gateway is already configured.",
+      "reauth_successful": "Token updated."
+    }
+  },
+  "config_subentries": {
+    "conversation": {
+      "initiate_flow": {
+        "user": "Add agent",
+        "reconfigure": "Reconfigure agent"
+      },
+      "entry_type": "Conversation agent",
+      "step": {
+        "init": {
+          "data": {
+            "name": "Name",
+            "agent": "ZeroClaw agent alias",
+            "session_mode": "Session",
+            "session_name": "Persistent session name",
+            "include_location": "Tell the agent which room the request came from"
+          },
+          "data_description": {
+            "session_mode": "Persistent keeps one running conversation across every wake word, room and day. Per conversation starts fresh after Assist's 5-minute idle timeout.",
+            "session_name": "ZeroClaw session id used in persistent mode."
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "Agent updated."
+      }
+    }
+  }
+}
