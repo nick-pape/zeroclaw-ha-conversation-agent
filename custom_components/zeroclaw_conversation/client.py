@@ -53,18 +53,19 @@ VOICE_REPLY_RULE = (
 
 
 def frame_message(text: str, *, area: str | None = None, extra: str | None = None) -> str:
-    """Prefix the user's words with where they came from.
+    """Wrap the user's words with where they came from and how to reply.
 
     The agent shares one session across rooms and channels, so it needs to know
     this turn is spoken (reply for TTS) and which room it was heard in. The
-    reply rule rides on every turn because smaller models lose it when it only
-    lives in a long system prompt.
+    reply rule comes last, after the user's words: smaller models ignore it in a
+    long system prompt, and even ahead of the question.
     """
     where = f"Home Assistant voice, {area}" if area else "Home Assistant voice"
-    lines = [f"[{where}]", f"[{VOICE_REPLY_RULE}]"]
+    lines = [f"[{where}]"]
     if extra:
         lines.append(f"[context: {extra.strip()}]")
     lines.append(text)
+    lines.append(f"[{VOICE_REPLY_RULE}]")
     return "\n".join(lines)
 
 

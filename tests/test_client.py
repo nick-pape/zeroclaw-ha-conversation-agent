@@ -137,9 +137,9 @@ def test_chat_url():
 
 def test_frame_message():
     rule = f"[{VOICE_REPLY_RULE}]"
-    assert frame_message("lights off") == f"[Home Assistant voice]\n{rule}\nlights off"
+    assert frame_message("lights off") == f"[Home Assistant voice]\nlights off\n{rule}"
     assert frame_message("lights off", area="Kitchen", extra=" timer done ") == (
-        f"[Home Assistant voice, Kitchen]\n{rule}\n[context: timer done]\nlights off"
+        f"[Home Assistant voice, Kitchen]\n[context: timer done]\nlights off\n{rule}"
     )
 
 
