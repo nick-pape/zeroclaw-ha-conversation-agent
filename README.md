@@ -31,13 +31,15 @@ flowchart LR
 
 ```
 [Home Assistant voice, Kitchen]
+[Your reply is spoken aloud: one or two short sentences, plain words, no markdown, lists or URLs. Don't narrate what you checked.]
 [context: <extra_system_prompt, if an automation passed one>]
 turn off the lights
 ```
 
 The first line tells the agent the reply will be spoken and which room the
-satellite is in (from the device's area; can be turned off per agent). The agent's
-own instructions decide what to do with that.
+satellite is in (from the device's area; can be turned off per agent). The second
+repeats the spoken-reply rule on every turn: smaller models drop it when it only
+lives in a long system prompt.
 
 ## Setup
 
