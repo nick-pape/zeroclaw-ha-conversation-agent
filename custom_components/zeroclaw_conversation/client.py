@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
@@ -130,10 +130,6 @@ async def run_turn(
         await ws.send_json({"type": "connect", "session_id": session_id, "device_name": device_name})
         await ws.send_json({"type": "message", "content": text})
         streamed = False
-        # Text before and after a tool round arrives as separate runs of chunks
-        # ("Let me check." / "It's on."): keep a space between them for TTS.
-        gap = False
-        ends_with_space = False
         async for msg in ws:
             if msg.type != aiohttp.WSMsgType.TEXT:
                 if msg.type == aiohttp.WSMsgType.ERROR:
@@ -149,14 +145,9 @@ async def run_turn(
             if kind == "chunk":
                 content = frame.get("content") or ""
                 if content:
-                    if gap and not content[0].isspace():
-                        content = f" {content}"
-                    gap = False
-                    ends_with_space = content[-1].isspace()
                     streamed = True
                     yield TurnEvent("text", content)
             elif kind in ("tool_call", "tool_result"):
-                gap = streamed and not ends_with_space
                 yield TurnEvent(kind, data=frame)
             elif kind == "approval_request":
                 # Approvals belong to the hub (ntfy), not to a voice satellite.
@@ -176,3 +167,48 @@ async def run_turn(
             # connected, session_start, thinking, agent_start/end, history_trimmed: ignored
 
         raise ZeroClawError("gateway closed the connection before the turn finished")
+
+
+# Tool output is shown in HA's chat log and sent to the frontend; ZeroClaw's can
+# be huge (e.g. a whole-house live context), so keep only the head of it.
+MAX_TOOL_OUTPUT_CHARS = 2000
+
+
+async def chat_log_deltas(events: AsyncIterator[TurnEvent]) -> AsyncGenerator[dict[str, Any]]:
+    """Shape turn events like HA's chat log deltas (types left to the caller).
+
+    Yields ``{"role": "assistant"}`` to open each assistant message, then
+    ``{"content": ...}`` and ``{"tool_call": {id, name, args}}`` inside it, and
+    ``{"role": "tool_result", "tool_call_id", "tool_name", "output"}`` after it.
+    A tool call starts a new assistant message once its result is in, so the text
+    before and after a tool round are separate messages, as HA expects.
+    """
+    open_message = False
+    async for event in events:
+        if event.kind == "text":
+            if not open_message:
+                yield {"role": "assistant"}
+                open_message = True
+            yield {"content": event.text}
+        elif event.kind == "tool_call" and event.data:
+            if not open_message:
+                yield {"role": "assistant"}
+                open_message = True
+            yield {
+                "tool_call": {
+                    "id": str(event.data.get("id") or ""),
+                    "name": str(event.data.get("name") or "tool"),
+                    "args": event.data.get("args") if isinstance(event.data.get("args"), dict) else {},
+                }
+            }
+        elif event.kind == "tool_result" and event.data:
+            output = event.data.get("output")
+            if not isinstance(output, str):
+                output = json.dumps(output, default=str)
+            yield {
+                "role": "tool_result",
+                "tool_call_id": str(event.data.get("id") or ""),
+                "tool_name": str(event.data.get("name") or "tool"),
+                "output": output[:MAX_TOOL_OUTPUT_CHARS],
+            }
+            open_message = False

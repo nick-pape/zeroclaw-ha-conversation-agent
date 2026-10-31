@@ -68,6 +68,14 @@ own instructions decide what to do with that.
 
 ## Behaviour notes
 
+- The agent's own tool calls enter HA's chat log as *external* tool calls with
+  their results (output truncated to 2000 characters). HA displays them and
+  never executes them. Text before a tool call is its own assistant message, so
+  the Assist pipeline starts speaking it before the tools finish.
+- Token-by-token streaming needs a ZeroClaw provider that streams. With
+  `wire_api = "chat_completions"`, the `openai` family does not stream, so each
+  step arrives as one block. An OpenAI-compatible `custom` provider with
+  `native_tools = true` does stream.
 - Tool approvals are not handled here. If the gateway asks this client for an
   approval, the client denies it rather than hanging the voice turn. Configure
   auto-approval, or out-of-band approval, on the ZeroClaw/MCP side.

@@ -83,19 +83,6 @@ async def test_streams_chunks_then_done(aiohttp_server):
     assert seen["frames"][1] == {"type": "message", "content": "hi"}
 
 
-async def test_space_between_text_runs_around_tools(aiohttp_server):
-    app, _ = gateway(lambda s: [
-        {"type": "chunk", "content": "Let me check."},
-        {"type": "tool_call", "id": "1", "name": "x", "args": {}},
-        {"type": "tool_result", "id": "1", "name": "x", "output": "on"},
-        {"type": "chunk", "content": "It's on"},
-        {"type": "chunk", "content": "."},
-        {"type": "done", "full_response": "Let me check.It's on."},
-    ])
-    events = await collect(await aiohttp_server(app))
-    assert "".join(e.text for e in events if e.kind == "text") == "Let me check. It's on."
-
-
 async def test_done_without_chunks_yields_full_response(aiohttp_server):
     app, _ = gateway(lambda s: [{"type": "done", "full_response": "Hey."}])
     events = await collect(await aiohttp_server(app))
@@ -152,3 +139,42 @@ def test_frame_message():
     assert frame_message("lights off", area="Kitchen", extra=" timer done ") == (
         "[Home Assistant voice, Kitchen]\n[context: timer done]\nlights off"
     )
+
+
+async def _events(*events):
+    for e in events:
+        yield e
+
+
+async def test_chat_log_deltas_split_messages_around_tools():
+    from zeroclaw_client import TurnEvent, chat_log_deltas
+
+    out = [d async for d in chat_log_deltas(_events(
+        TurnEvent("text", "Let me check."),
+        TurnEvent("tool_call", data={"id": "c1", "name": "assist_GetLiveContext", "args": {"a": 1}}),
+        TurnEvent("tool_result", data={"id": "c1", "name": "assist_GetLiveContext", "output": "x" * 5000}),
+        TurnEvent("text", "It's off."),
+        TurnEvent("done", data={}),
+    ))]
+    assert out[:3] == [
+        {"role": "assistant"},
+        {"content": "Let me check."},
+        {"tool_call": {"id": "c1", "name": "assist_GetLiveContext", "args": {"a": 1}}},
+    ]
+    assert out[3]["role"] == "tool_result" and out[3]["tool_call_id"] == "c1"
+    assert len(out[3]["output"]) == 2000
+    assert out[4:] == [{"role": "assistant"}, {"content": "It's off."}]
+
+
+async def test_chat_log_deltas_tool_first_and_tool_last():
+    from zeroclaw_client import TurnEvent, chat_log_deltas
+
+    out = [d async for d in chat_log_deltas(_events(
+        TurnEvent("tool_call", data={"id": "c1", "name": "t", "args": None}),
+        TurnEvent("tool_result", data={"id": "c1", "name": "t", "output": {"ok": True}}),
+    ))]
+    assert out == [
+        {"role": "assistant"},
+        {"tool_call": {"id": "c1", "name": "t", "args": {}}},
+        {"role": "tool_result", "tool_call_id": "c1", "tool_name": "t", "output": '{"ok": true}'},
+    ]

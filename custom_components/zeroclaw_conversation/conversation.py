@@ -11,11 +11,11 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import area_registry as ar, device_registry as dr
+from homeassistant.helpers import area_registry as ar, device_registry as dr, llm
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .client import ZeroClawAuthError, ZeroClawError, frame_message, run_turn
+from .client import ZeroClawAuthError, ZeroClawError, chat_log_deltas, frame_message, run_turn
 from .const import (
     CONF_AGENT,
     CONF_INCLUDE_LOCATION,
@@ -116,9 +116,14 @@ class ZeroClawConversationEntity(conversation.ConversationEntity):
         return conversation.async_get_result_from_chat_log(user_input, chat_log)
 
     async def _stream(self, message: str, session_id: str) -> AsyncGenerator[dict[str, Any]]:
-        """Adapt ZeroClaw turn events to HA assistant content deltas."""
-        yield {"role": "assistant"}
-        async for event in run_turn(
+        """Adapt ZeroClaw turn events to HA chat log deltas.
+
+        ZeroClaw runs its own tools, so they enter the chat log as *external*
+        tool calls: HA records and displays them without executing anything.
+        Text followed by a tool call is also what makes the Assist pipeline start
+        streaming TTS before the turn ends.
+        """
+        events = run_turn(
             async_get_clientsession(self.hass),
             base_url=self.entry.data[CONF_URL],
             token=self.entry.data[CONF_TOKEN],
@@ -126,8 +131,31 @@ class ZeroClawConversationEntity(conversation.ConversationEntity):
             session_id=session_id,
             text=message,
             timeout=TURN_TIMEOUT_S,
-        ):
-            if event.kind == "text":
-                yield {"content": event.text}
-            elif event.kind == "tool_call" and event.data:
-                _LOGGER.debug("Agent tool call: %s", event.data.get("name"))
+        )
+        async for delta in chat_log_deltas(events):
+            if call := delta.get("tool_call"):
+                yield {
+                    "tool_calls": [
+                        llm.ToolInput(
+                            id=call["id"],
+                            tool_name=call["name"],
+                            tool_args=call["args"],
+                            external=True,
+                        )
+                    ]
+                }
+            elif delta.get("role") == "tool_result":
+                data = {"output": delta["output"]}
+                yield {
+                    "role": "tool_result",
+                    "tool_call_id": delta["tool_call_id"],
+                    "tool_name": delta["tool_name"],
+                    # HA 2026.11+ wants `result`; older versions read `tool_result`.
+                    **(
+                        {"result": llm.ToolResult(data=data)}
+                        if hasattr(llm, "ToolResult")
+                        else {"tool_result": data}
+                    ),
+                }
+            else:
+                yield delta
